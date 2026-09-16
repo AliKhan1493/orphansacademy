@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Graduation Cap Top Diamond -->
+    <path
+        android:fillColor="#FBBF24"
+        android:pathData="M54,28 L78,38 L54,48 L30,38 Z" />
+    <!-- Graduation Cap Skullcap Base -->
+    <path
+        android:fillColor="#D97706"
+        android:pathData="M40,42.5 L40,51 C40,57 68,57 68,51 L68,42.5 L54,48 Z" />
+    <!-- Tassel and string -->
+    <path
+        android:fillColor="#FDE68A"
+        android:pathData="M72,39 L78,54 L75,54 L70,40 Z" />
+    <path
+        android:fillColor="#FDE68A"
+        android:pathData="M74,53 A2.5,2.5 0 1 1 73.9,53" />
+
+    <!-- Open Book Crest in Academy Colors -->
+    <!-- Left Page -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M33,63 C40,63 48,65 52,68 L52,83 C48,80 40,78 33,78 Z" />
+    <!-- Right Page -->
+    <path
+        android:fillColor="#F1F5F9"
+        android:pathData="M75,63 C68,63 60,65 56,68 L56,83 C60,80 68,78 75,78 Z" />
+    <!-- Book Spine Divider -->
+    <path
+        android:strokeColor="#F59E0B"
+        android:strokeWidth="2"
+        android:pathData="M54,67 L54,84" />
+    <!-- Small Knowledge Star -->
+    <path
+        android:fillColor="#FBBF24"
+        android:pathData="M54,58 L55.5,61.5 L59,62 L56.5,64.2 L57.2,67.7 L54,66 L50.8,67.7 L51.5,64.2 L49,62 L52.5,61.5 Z" />
+</vector>
+

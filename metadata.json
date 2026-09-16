@@ -1,0 +1,6 @@
+{
+  "name": "Orphan's Academy",
+  "description": "4-Tier RBAC Academy management system with online Firebase and 100% offline Room local auth, student ID generator, syllabus manager, and A4 PDF test builder.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
