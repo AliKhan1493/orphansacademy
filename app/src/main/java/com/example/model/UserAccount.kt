@@ -12,6 +12,9 @@ data class UserAccount(
     val role: UserRole,
     val assignedLocation: String? = null,
     val studentAdmissionNo: String? = null,
+    val assignedLatitude: Double? = null,
+    val assignedLongitude: Double? = null,
+    val geofenceRadiusMeters: Double? = null,
     val isPendingCloudSync: Boolean = false,
     val lastLoginTimestamp: Long = System.currentTimeMillis()
 )

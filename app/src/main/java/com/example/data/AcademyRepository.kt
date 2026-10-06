@@ -124,10 +124,25 @@ class AcademyRepository(
         role: UserRole,
         latitude: Double?,
         longitude: Double?,
-        locationName: String
+        locationName: String,
+        assignedLatitude: Double? = null,
+        assignedLongitude: Double? = null,
+        geofenceRadiusMeters: Double = 150.0
     ): AttendanceRecord = withContext(Dispatchers.IO) {
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
         val timeNow = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date())
+
+        val distance = if (assignedLatitude != null && assignedLongitude != null && latitude != null && longitude != null) {
+            com.example.util.LocationHelper.calculateDistanceMeters(latitude, longitude, assignedLatitude, assignedLongitude)
+        } else {
+            0f
+        }
+        val isWithin = if (assignedLatitude != null && assignedLongitude != null) {
+            distance <= geofenceRadiusMeters
+        } else {
+            true
+        }
+        val computedStatus = if (isWithin) "PRESENT" else "OUT_OF_COVERAGE"
 
         val existing = attendanceDao.getAttendanceForPersonOnDate(personId, today)
         if (existing != null) {
@@ -142,10 +157,13 @@ class AcademyRepository(
                 date = today,
                 checkInTime = timeNow,
                 checkOutTime = null,
-                status = "PRESENT",
+                status = computedStatus,
                 checkInLatitude = latitude,
                 checkInLongitude = longitude,
                 checkInLocationName = locationName,
+                checkInDistanceMeters = distance,
+                isWithinGeofence = isWithin,
+                assignedRadiusMeters = geofenceRadiusMeters,
                 syncStatus = "PENDING",
                 timestamp = System.currentTimeMillis()
             )
@@ -158,10 +176,18 @@ class AcademyRepository(
         personId: String,
         latitude: Double?,
         longitude: Double?,
-        locationName: String
+        locationName: String,
+        assignedLatitude: Double? = null,
+        assignedLongitude: Double? = null
     ): AttendanceRecord? = withContext(Dispatchers.IO) {
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
         val timeNow = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date())
+
+        val distance = if (assignedLatitude != null && assignedLongitude != null && latitude != null && longitude != null) {
+            com.example.util.LocationHelper.calculateDistanceMeters(latitude, longitude, assignedLatitude, assignedLongitude)
+        } else {
+            0f
+        }
 
         val existing = attendanceDao.getAttendanceForPersonOnDate(personId, today)
         if (existing != null) {
@@ -170,6 +196,7 @@ class AcademyRepository(
                 checkOutLatitude = latitude,
                 checkOutLongitude = longitude,
                 checkOutLocationName = locationName,
+                checkOutDistanceMeters = distance,
                 syncStatus = "PENDING",
                 timestamp = System.currentTimeMillis()
             )
@@ -180,6 +207,10 @@ class AcademyRepository(
         }
     }
 
+    suspend fun saveClassroomAttendance(records: List<AttendanceRecord>) = withContext(Dispatchers.IO) {
+        attendanceDao.insertAttendanceRecords(records)
+    }
+
     suspend fun getTodayAttendanceForPerson(personId: String): AttendanceRecord? = withContext(Dispatchers.IO) {
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
         attendanceDao.getAttendanceForPersonOnDate(personId, today)
@@ -187,6 +218,21 @@ class AcademyRepository(
 
     fun getAttendanceByPerson(personId: String): Flow<List<AttendanceRecord>> =
         attendanceDao.getAttendanceByPerson(personId)
+
+    suspend fun saveClassroomRosterAttendance(records: List<AttendanceRecord>) = withContext(Dispatchers.IO) {
+        attendanceDao.insertAttendanceRecords(records)
+    }
+
+    suspend fun bulkAssignStudentsToSponsor(sponsorId: String, studentAdmissionNos: List<String>) = withContext(Dispatchers.IO) {
+        val sponsor = sponsorDao.getSponsorById(sponsorId) ?: return@withContext
+        val currentNotes = sponsor.notes ?: ""
+        val updatedNotes = "$currentNotes\nAssigned: ${studentAdmissionNos.joinToString(", ")}"
+        val updated = sponsor.copy(
+            sponsoredStudentAdmissionNo = studentAdmissionNos.firstOrNull() ?: sponsor.sponsoredStudentAdmissionNo,
+            notes = updatedNotes
+        )
+        sponsorDao.updateSponsor(updated)
+    }
 
     // Generate monthly progress report for sponsors
     suspend fun generateMonthlyDonorReport(

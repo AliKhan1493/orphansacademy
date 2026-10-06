@@ -48,9 +48,22 @@ class TeacherViewModel(
     private val _isCheckingLocation = MutableStateFlow(false)
     val isCheckingLocation: StateFlow<Boolean> = _isCheckingLocation.asStateFlow()
 
+    private val sessionManager = com.example.util.EncryptedSessionManager(context)
+
+    private val _academyGeofence = MutableStateFlow(sessionManager.getAcademyGeofence())
+    val academyGeofence: StateFlow<com.example.model.AcademyGeofence> = _academyGeofence.asStateFlow()
+
+    private val _liveCoordinates = MutableStateFlow<com.example.util.GeolocationResult?>(null)
+    val liveCoordinates: StateFlow<com.example.util.GeolocationResult?> = _liveCoordinates.asStateFlow()
+
+    fun refreshAcademyGeofence() {
+        _academyGeofence.value = sessionManager.getAcademyGeofence()
+    }
+
     fun loadTodayAttendance(teacherId: String) {
         viewModelScope.launch {
             _todayAttendance.value = academyRepository.getTodayAttendanceForPerson(teacherId)
+            _academyGeofence.value = sessionManager.getAcademyGeofence()
         }
     }
 
@@ -76,39 +89,111 @@ class TeacherViewModel(
         viewModelScope.launch { academyRepository.insertTestRecord(record) }
     }
 
-    fun checkInLiveLocation(teacherId: String, teacherName: String, onDone: (String) -> Unit) {
+    fun saveClassroomAttendance(records: List<AttendanceRecord>, onComplete: (String) -> Unit) {
+        viewModelScope.launch {
+            academyRepository.saveClassroomRosterAttendance(records)
+            SyncScheduler.triggerImmediateSync(context)
+            onComplete("Class attendance for ${records.size} students saved successfully.")
+        }
+    }
+
+    fun checkInLiveLocation(teacherId: String, teacherName: String, onDone: (String, Boolean) -> Unit) {
         _isCheckingLocation.value = true
         viewModelScope.launch {
             val geo = LocationHelper.getLiveLocation(context)
-            val record = academyRepository.recordAttendanceCheckIn(
+            _liveCoordinates.value = geo
+            val geofence = sessionManager.getAcademyGeofence()
+            _academyGeofence.value = geofence
+
+            val distance = LocationHelper.calculateDistanceMeters(
+                startLat = geo.latitude,
+                startLon = geo.longitude,
+                endLat = geofence.latitude,
+                endLon = geofence.longitude
+            )
+            val isWithin = distance <= geofence.radiusMeters
+            val status = if (isWithin) "PRESENT" else "OUT_OF_COVERAGE"
+            val locationName = if (isWithin) {
+                "${geofence.campusName} (Verified Inside Perimeter)"
+            } else {
+                "OUT OF COVERAGE (${distance.toInt()}m from Academy)"
+            }
+
+            val baseRecord = academyRepository.recordAttendanceCheckIn(
                 personId = teacherId,
                 personName = teacherName,
                 role = UserRole.TEACHER,
                 latitude = geo.latitude,
                 longitude = geo.longitude,
-                locationName = geo.campusZone
+                locationName = locationName
             )
-            _todayAttendance.value = record
+
+            val fullRecord = baseRecord.copy(
+                status = status,
+                isWithinGeofence = isWithin,
+                checkInDistanceMeters = distance,
+                assignedRadiusMeters = geofence.radiusMeters
+            )
+            academyRepository.saveClassroomRosterAttendance(listOf(fullRecord))
+
+            _todayAttendance.value = fullRecord
             _isCheckingLocation.value = false
             SyncScheduler.triggerImmediateSync(context)
-            onDone("Check-in verified at ${geo.campusZone} (${record.checkInTime})")
+
+            val msg = if (isWithin) {
+                "Verified In Coverage at ${geofence.campusName} (${distance.toInt()}m from center, Limit: ${geofence.radiusMeters.toInt()}m)"
+            } else {
+                "OUT OF COVERAGE: You are ${distance.toInt()}m away from Academy (Coverage perimeter is ${geofence.radiusMeters.toInt()}m)"
+            }
+            onDone(msg, isWithin)
         }
     }
 
-    fun checkOutLiveLocation(teacherId: String, onDone: (String) -> Unit) {
+    fun checkOutLiveLocation(teacherId: String, onDone: (String, Boolean) -> Unit) {
         _isCheckingLocation.value = true
         viewModelScope.launch {
             val geo = LocationHelper.getLiveLocation(context)
+            _liveCoordinates.value = geo
+            val geofence = sessionManager.getAcademyGeofence()
+
+            val distance = LocationHelper.calculateDistanceMeters(
+                startLat = geo.latitude,
+                startLon = geo.longitude,
+                endLat = geofence.latitude,
+                endLon = geofence.longitude
+            )
+            val isWithin = distance <= geofence.radiusMeters
+            val locationName = if (isWithin) {
+                "${geofence.campusName} (Verified Departure)"
+            } else {
+                "OUT OF COVERAGE Check-Out (${distance.toInt()}m from Academy)"
+            }
+
             val updated = academyRepository.recordAttendanceCheckOut(
                 personId = teacherId,
                 latitude = geo.latitude,
                 longitude = geo.longitude,
-                locationName = geo.campusZone
+                locationName = locationName
             )
-            _todayAttendance.value = updated
+
+            val finalRecord = updated?.copy(
+                checkOutDistanceMeters = distance,
+                checkOutLocationName = locationName
+            )
+            if (finalRecord != null) {
+                academyRepository.saveClassroomRosterAttendance(listOf(finalRecord))
+            }
+
+            _todayAttendance.value = finalRecord ?: updated
             _isCheckingLocation.value = false
             SyncScheduler.triggerImmediateSync(context)
-            onDone("Check-out recorded at ${updated?.checkOutTime ?: "now"}")
+
+            val msg = if (isWithin) {
+                "Check-out verified within coverage perimeter (${distance.toInt()}m)"
+            } else {
+                "Check-out logged OUT OF COVERAGE (${distance.toInt()}m from Academy)"
+            }
+            onDone(msg, isWithin)
         }
     }
 }

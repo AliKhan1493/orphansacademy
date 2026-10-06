@@ -323,7 +323,7 @@ class AuthRepository(
 
     private suspend fun performOfflineSignIn(email: String, password: String): AuthResult {
         val user = userAccountDao.getUserByEmail(email)
-            ?: return AuthResult.Error("No account found for '$email'. Click 'Use Admin Demo' or Sign Up.")
+            ?: return AuthResult.Error("No account found for '$email'. Please verify your email or sign up.")
 
         if (SecurityUtils.verifyPassword(password, user.passwordHash)) {
             val updated = user.copy(lastLoginTimestamp = System.currentTimeMillis())
