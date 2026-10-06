@@ -1,6 +1,9 @@
 package com.example.ui
 
 import android.graphics.Bitmap
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
+import java.io.File
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -315,6 +318,8 @@ fun StudentIdCardView(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Photo Area
+                val hasSavedFile = student.photoUri != null && File(student.photoUri).exists()
+
                 Box(
                     modifier = Modifier
                         .size(96.dp)
@@ -329,7 +334,15 @@ fun StudentIdCardView(
                         Image(
                             bitmap = capturedPhoto!!.asImageBitmap(),
                             contentDescription = "Student Photo",
-                            modifier = Modifier.size(96.dp)
+                            modifier = Modifier.size(96.dp),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else if (hasSavedFile) {
+                        AsyncImage(
+                            model = File(student.photoUri!!),
+                            contentDescription = "Student Photo",
+                            modifier = Modifier.size(96.dp),
+                            contentScale = ContentScale.Crop
                         )
                     } else {
                         Column(
@@ -425,4 +438,158 @@ fun StudentIdCardView(
             }
         }
     }
+}
+
+@Composable
+fun MonthlyDonorReportDialog(
+    report: com.example.model.MonthlyDonorReport,
+    onDismiss: () -> Unit
+) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.AutoStories,
+                    contentDescription = null,
+                    tint = DeepForestTeal,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text(
+                        text = "Monthly Sponsor Progress Report",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = DarkMossGray
+                    )
+                    Text(
+                        text = "${report.monthYear} • Ref: ${report.reportId}",
+                        fontSize = 11.sp,
+                        color = DarkMossGrayMuted
+                    )
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = PastelSeafoamLight),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = "BENEFICIARY STUDENT",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = DeepForestTeal
+                        )
+                        Text(
+                            text = "${report.studentName} (${report.studentAdmissionNo})",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = DarkMossGray
+                        )
+                        Text(
+                            text = "Academic Level: ${report.gradeLevel}",
+                            fontSize = 12.sp,
+                            color = DarkMossGrayMuted
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Surface(
+                        modifier = Modifier.weight(1f),
+                        color = PaleSageOffWhite,
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, PastelSeafoam)
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text(text = "Attendance", fontSize = 10.sp, color = DarkMossGrayMuted)
+                            Text(
+                                text = "${report.attendancePercentage}%",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = DeepForestTeal
+                            )
+                        }
+                    }
+                    Surface(
+                        modifier = Modifier.weight(1f),
+                        color = PaleSageOffWhite,
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, SoftAmberPeachLight)
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text(text = "Monthly Pledge", fontSize = 10.sp, color = DarkMossGrayMuted)
+                            Text(
+                                text = "${report.currency} ${report.totalReceived}",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SoftAmberPeachDark
+                            )
+                        }
+                    }
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(PaleSageOffWhite, RoundedCornerShape(8.dp))
+                        .padding(10.dp)
+                ) {
+                    Text(
+                        text = "Curriculum Standing:",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = DarkMossGray
+                    )
+                    Text(
+                        text = report.academicSummary,
+                        fontSize = 11.sp,
+                        color = DarkMossGrayMuted
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Welfare & Health Status:",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = DarkMossGray
+                    )
+                    Text(
+                        text = report.healthAndWelfareNotes,
+                        fontSize = 11.sp,
+                        color = DarkMossGrayMuted
+                    )
+                }
+
+                Text(
+                    text = "“${report.academyMessage}”",
+                    fontSize = 11.sp,
+                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                    color = DeepForestTeal,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = DeepForestTeal)
+            ) {
+                Text("Close Report")
+            }
+        }
+    )
 }

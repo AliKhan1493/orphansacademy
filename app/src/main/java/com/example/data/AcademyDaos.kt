@@ -6,8 +6,11 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import com.example.model.AttendanceRecord
 import com.example.model.CustomFeature
+import com.example.model.DonationRecord
 import com.example.model.ExamTest
+import com.example.model.Sponsor
 import com.example.model.Student
 import com.example.model.SyllabusTopic
 import com.example.model.Teacher
@@ -186,3 +189,97 @@ interface FeatureDao {
     @Delete
     suspend fun deleteFeature(feature: CustomFeature)
 }
+
+@Dao
+interface SponsorDao {
+    @Query("SELECT * FROM sponsors ORDER BY fullName ASC")
+    fun getAllSponsors(): Flow<List<Sponsor>>
+
+    @Query("SELECT * FROM sponsors WHERE id = :id LIMIT 1")
+    suspend fun getSponsorById(id: String): Sponsor?
+
+    @Query("SELECT * FROM sponsors WHERE sponsoredStudentAdmissionNo = :admissionNo")
+    fun getSponsorsForStudent(admissionNo: String): Flow<List<Sponsor>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSponsor(sponsor: Sponsor)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSponsors(sponsors: List<Sponsor>)
+
+    @Update
+    suspend fun updateSponsor(sponsor: Sponsor)
+
+    @Delete
+    suspend fun deleteSponsor(sponsor: Sponsor)
+
+    @Query("SELECT COUNT(*) FROM sponsors")
+    suspend fun countSponsors(): Int
+}
+
+@Dao
+interface DonationDao {
+    @Query("SELECT * FROM donations ORDER BY timestamp DESC")
+    fun getAllDonations(): Flow<List<DonationRecord>>
+
+    @Query("SELECT * FROM donations WHERE sponsorId = :sponsorId ORDER BY timestamp DESC")
+    fun getDonationsBySponsor(sponsorId: String): Flow<List<DonationRecord>>
+
+    @Query("SELECT * FROM donations WHERE studentAdmissionNo = :admissionNo ORDER BY timestamp DESC")
+    fun getDonationsByStudent(admissionNo: String): Flow<List<DonationRecord>>
+
+    @Query("SELECT * FROM donations WHERE syncStatus = 'PENDING'")
+    suspend fun getPendingSyncDonations(): List<DonationRecord>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDonation(donation: DonationRecord)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDonations(donations: List<DonationRecord>)
+
+    @Update
+    suspend fun updateDonation(donation: DonationRecord)
+
+    @Delete
+    suspend fun deleteDonation(donation: DonationRecord)
+
+    @Query("SELECT COUNT(*) FROM donations")
+    suspend fun countDonations(): Int
+}
+
+@Dao
+interface AttendanceDao {
+    @Query("SELECT * FROM attendance_records ORDER BY timestamp DESC")
+    fun getAllAttendance(): Flow<List<AttendanceRecord>>
+
+    @Query("SELECT * FROM attendance_records WHERE date = :date ORDER BY timestamp DESC")
+    fun getAttendanceByDate(date: String): Flow<List<AttendanceRecord>>
+
+    @Query("SELECT * FROM attendance_records WHERE personId = :personId ORDER BY timestamp DESC")
+    fun getAttendanceByPerson(personId: String): Flow<List<AttendanceRecord>>
+
+    @Query("SELECT * FROM attendance_records WHERE personId = :personId AND date = :date LIMIT 1")
+    suspend fun getAttendanceForPersonOnDate(personId: String, date: String): AttendanceRecord?
+
+    @Query("SELECT * FROM attendance_records WHERE syncStatus = 'PENDING'")
+    suspend fun getPendingSyncRecords(): List<AttendanceRecord>
+
+    @Query("SELECT COUNT(*) FROM attendance_records WHERE date = :date AND status = 'PRESENT'")
+    fun getPresentCountToday(date: String): Flow<Int>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAttendance(record: AttendanceRecord)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAttendanceRecords(records: List<AttendanceRecord>)
+
+    @Update
+    suspend fun updateAttendance(record: AttendanceRecord)
+
+    @Delete
+    suspend fun deleteAttendance(record: AttendanceRecord)
+
+    @Query("SELECT COUNT(*) FROM attendance_records")
+    suspend fun countAttendance(): Int
+}
+

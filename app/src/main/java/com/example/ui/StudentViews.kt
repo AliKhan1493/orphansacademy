@@ -1,5 +1,6 @@
 package com.example.ui
 
+import android.graphics.Bitmap
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,7 +22,11 @@ import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Grade
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.NearMe
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -37,11 +42,17 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.model.AttendanceRecord
 import com.example.model.ExamTest
 import com.example.model.Student
 import com.example.model.SyllabusTopic
 import com.example.model.TestRecord
 import com.example.model.UserAccount
+import com.example.ui.theme.DarkMossGray
+import com.example.ui.theme.DeepForestTeal
+import com.example.ui.theme.PaleSageOffWhite
+import com.example.ui.theme.PastelSeafoam
+import com.example.ui.theme.PastelSeafoamLight
 import com.example.ui.theme.AcademyBlue
 import com.example.ui.theme.AcademyBlueDark
 import com.example.ui.theme.AcademyGold
@@ -51,7 +62,11 @@ import com.example.ui.theme.Slate900
 @Composable
 fun StudentDigitalIdTab(
     currentUser: UserAccount,
-    studentProfile: Student?
+    studentProfile: Student?,
+    onPhotoCaptured: (Bitmap) -> Unit = {},
+    todayAttendance: AttendanceRecord? = null,
+    isCheckingLocation: Boolean = false,
+    onCheckInLiveLocation: () -> Unit = {}
 ) {
     // If no explicit student profile found for admissionNo, build fallback from account
     val student = studentProfile ?: Student(
@@ -84,7 +99,90 @@ fun StudentDigitalIdTab(
         }
 
         item {
-            StudentIdCardView(student = student)
+            StudentIdCardView(student = student, onPhotoCaptured = onPhotoCaptured)
+        }
+
+        // Student Daily Geolocation Check-In Station
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("student_attendance_card"),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(12.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, PastelSeafoam)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(PastelSeafoam),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.NearMe,
+                                    contentDescription = null,
+                                    tint = DeepForestTeal,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "ACADEMY CHECK-IN STATION",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = DeepForestTeal
+                                )
+                                Text(
+                                    text = if (todayAttendance != null) "Verified: ${todayAttendance.checkInLocationName}" else "Not Checked-In Today",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = DarkMossGray
+                                )
+                            }
+                        }
+                        Surface(
+                            color = if (todayAttendance != null) PastelSeafoamLight else PaleSageOffWhite,
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = if (todayAttendance != null) "PRESENT (${todayAttendance.checkInTime})" else "AWAITING",
+                                color = if (todayAttendance != null) DeepForestTeal else Color(0xFF64748B),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Button(
+                        onClick = onCheckInLiveLocation,
+                        enabled = !isCheckingLocation && todayAttendance == null,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("student_gps_checkin_button"),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = DeepForestTeal)
+                    ) {
+                        Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (todayAttendance != null) "Daily Attendance Verified" else if (isCheckingLocation) "Verifying GPS..." else "Check-In at Academy Gates",
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
         }
 
         item {

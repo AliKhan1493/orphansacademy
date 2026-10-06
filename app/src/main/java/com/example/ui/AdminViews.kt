@@ -74,6 +74,14 @@ import com.example.model.Student
 import com.example.model.Teacher
 import com.example.model.UserAccount
 import com.example.model.UserRole
+import com.example.model.Sponsor
+import com.example.model.DonationRecord
+import com.example.model.AttendanceRecord
+import androidx.compose.material.icons.filled.VolunteerActivism
+import androidx.compose.material.icons.filled.HowToReg
+import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Receipt
 import com.example.ui.theme.AcademyBlue
 import com.example.ui.theme.AcademyBlueDark
 import com.example.ui.theme.AcademyGold
@@ -1424,3 +1432,486 @@ fun AdminResetPasswordDialog(
         }
     )
 }
+
+@Composable
+fun AdminSponsorsTab(
+    sponsors: List<Sponsor>,
+    donations: List<DonationRecord>,
+    students: List<Student>,
+    onAddSponsor: (Sponsor) -> Unit,
+    onDeleteSponsor: (Sponsor) -> Unit,
+    onRecordDonation: (DonationRecord) -> Unit,
+    onGenerateReport: (String) -> Unit
+) {
+    var showAddSponsorDialog by remember { mutableStateOf(false) }
+    var showAddDonationDialog by remember { mutableStateOf(false) }
+    var selectedSponsorForDonation by remember { mutableStateOf<Sponsor?>(null) }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "SPONSORS & DONORS DIRECTORY (${sponsors.size})",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AcademyBlueDark,
+                        letterSpacing = 1.sp
+                    )
+                    Text(
+                        text = "Total Donations: ${donations.size}",
+                        fontSize = 11.sp,
+                        color = com.example.ui.theme.DarkMossGrayMuted
+                    )
+                }
+            }
+
+            items(sponsors) { sponsor ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("sponsor_card_${sponsor.id}"),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .clip(CircleShape)
+                                    .background(com.example.ui.theme.PastelSeafoam),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.VolunteerActivism,
+                                    contentDescription = null,
+                                    tint = com.example.ui.theme.DeepForestTeal,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = sponsor.fullName,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = com.example.ui.theme.DarkMossGray
+                                )
+                                Text(
+                                    text = "${sponsor.organization ?: "Individual Patron"} • ${sponsor.email}",
+                                    fontSize = 11.sp,
+                                    color = com.example.ui.theme.DarkMossGrayMuted
+                                )
+                            }
+                            IconButton(
+                                onClick = { onDeleteSponsor(sponsor) },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Delete Sponsor",
+                                    tint = Color(0xFFEF4444),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Surface(
+                            color = com.example.ui.theme.PaleSageOffWhite,
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "Sponsored Student: ${sponsor.sponsoredStudentAdmissionNo}",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = com.example.ui.theme.DeepForestTeal
+                                    )
+                                    Text(
+                                        text = "Monthly Pledge: ${sponsor.currency} ${sponsor.monthlyPledgeAmount}",
+                                        fontSize = 11.sp,
+                                        color = com.example.ui.theme.DarkMossGray
+                                    )
+                                }
+                                Surface(
+                                    color = com.example.ui.theme.SoftAmberPeachLight,
+                                    shape = RoundedCornerShape(4.dp)
+                                ) {
+                                    Text(
+                                        text = sponsor.status,
+                                        color = com.example.ui.theme.SoftAmberPeachDark,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        if (sponsor.notes.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = sponsor.notes,
+                                fontSize = 11.sp,
+                                color = com.example.ui.theme.DarkMossGrayMuted
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    selectedSponsorForDonation = sponsor
+                                    showAddDonationDialog = true
+                                },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(Icons.Default.AttachMoney, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Log Donation", fontSize = 11.sp)
+                            }
+                            Button(
+                                onClick = { onGenerateReport(sponsor.id) },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = com.example.ui.theme.DeepForestTeal)
+                            ) {
+                                Icon(Icons.Default.Receipt, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Monthly Report", fontSize = 11.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        FloatingActionButton(
+            onClick = { showAddSponsorDialog = true },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp)
+                .testTag("add_sponsor_fab"),
+            containerColor = com.example.ui.theme.SoftAmberPeach,
+            contentColor = Color.White
+        ) {
+            Icon(Icons.Default.Add, contentDescription = "Add Sponsor")
+        }
+    }
+
+    if (showAddSponsorDialog) {
+        var fullName by remember { mutableStateOf("") }
+        var email by remember { mutableStateOf("") }
+        var phone by remember { mutableStateOf("") }
+        var org by remember { mutableStateOf("") }
+        var studentAdmission by remember { mutableStateOf(students.firstOrNull()?.admissionNo ?: "OA-2026-042") }
+        var pledge by remember { mutableStateOf("200") }
+        var notes by remember { mutableStateOf("") }
+
+        AlertDialog(
+            onDismissRequest = { showAddSponsorDialog = false },
+            title = { Text("Add Financial Sponsor / Donor") },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = fullName,
+                        onValueChange = { fullName = it },
+                        label = { Text("Sponsor Full Name") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = { email = it },
+                        label = { Text("Email Address") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = phone,
+                        onValueChange = { phone = it },
+                        label = { Text("Phone Number") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = org,
+                        onValueChange = { org = it },
+                        label = { Text("Organization / Foundation (Optional)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = studentAdmission,
+                        onValueChange = { studentAdmission = it },
+                        label = { Text("Sponsored Student Admission ID") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = pledge,
+                        onValueChange = { pledge = it },
+                        label = { Text("Monthly Pledge Amount (USD)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = notes,
+                        onValueChange = { notes = it },
+                        label = { Text("Sponsorship Purpose / Notes") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (fullName.isNotBlank() && email.isNotBlank()) {
+                            val newSponsor = Sponsor(
+                                id = "spn_${System.currentTimeMillis()}",
+                                fullName = fullName.trim(),
+                                email = email.trim(),
+                                phone = phone.trim(),
+                                organization = org.ifBlank { null },
+                                sponsoredStudentAdmissionNo = studentAdmission.trim(),
+                                monthlyPledgeAmount = pledge.toDoubleOrNull() ?: 150.0,
+                                currency = "USD",
+                                activeSince = "2026-10-06",
+                                notes = notes.trim()
+                            )
+                            onAddSponsor(newSponsor)
+                            showAddSponsorDialog = false
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = com.example.ui.theme.DeepForestTeal)
+                ) {
+                    Text("Register Sponsor")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddSponsorDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (showAddDonationDialog && selectedSponsorForDonation != null) {
+        val sponsor = selectedSponsorForDonation!!
+        var amount by remember { mutableStateOf(sponsor.monthlyPledgeAmount.toString()) }
+        var purpose by remember { mutableStateOf("Monthly Education & Daily Nutrition") }
+
+        AlertDialog(
+            onDismissRequest = { showAddDonationDialog = false },
+            title = { Text("Log Donation from ${sponsor.fullName}") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = amount,
+                        onValueChange = { amount = it },
+                        label = { Text("Amount (${sponsor.currency})") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = purpose,
+                        onValueChange = { purpose = it },
+                        label = { Text("Purpose / Allocation") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val record = DonationRecord(
+                            id = "don_${System.currentTimeMillis()}",
+                            sponsorId = sponsor.id,
+                            sponsorName = sponsor.fullName,
+                            studentAdmissionNo = sponsor.sponsoredStudentAdmissionNo,
+                            amount = amount.toDoubleOrNull() ?: sponsor.monthlyPledgeAmount,
+                            currency = sponsor.currency,
+                            date = "2026-10-06",
+                            purpose = purpose,
+                            receiptNumber = "REC-${System.currentTimeMillis().toString().takeLast(6)}",
+                            syncStatus = "PENDING"
+                        )
+                        onRecordDonation(record)
+                        showAddDonationDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = com.example.ui.theme.DeepForestTeal)
+                ) {
+                    Text("Record & Generate Receipt")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddDonationDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+}
+
+@Composable
+fun AdminAttendanceTab(
+    attendanceRecords: List<AttendanceRecord>
+) {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        item {
+            Surface(
+                color = com.example.ui.theme.PastelSeafoamLight,
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.HowToReg,
+                        contentDescription = null,
+                        tint = com.example.ui.theme.DeepForestTeal,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "INSTITUTION ATTENDANCE LEDGER",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = com.example.ui.theme.DeepForestTeal
+                        )
+                        Text(
+                            text = "${attendanceRecords.size} Total check-in log(s) with live GPS verification",
+                            fontSize = 11.sp,
+                            color = com.example.ui.theme.DarkMossGray
+                        )
+                    }
+                }
+            }
+        }
+
+        items(attendanceRecords) { att ->
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("attendance_card_${att.id}"),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (att.status == "PRESENT") com.example.ui.theme.PastelSeafoam else com.example.ui.theme.SoftAmberPeachLight
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = if (att.status == "PRESENT") com.example.ui.theme.DeepForestTeal else com.example.ui.theme.SoftAmberPeachDark,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = att.personName,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = com.example.ui.theme.DarkMossGray
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Surface(
+                                color = com.example.ui.theme.PaleSageOffWhite,
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Text(
+                                    text = att.userRole.name,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = com.example.ui.theme.DeepForestTeal,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                        Text(
+                            text = "Date: ${att.date} • In: ${att.checkInTime} ${if (att.checkOutTime != null) "• Out: ${att.checkOutTime}" else ""}",
+                            fontSize = 11.sp,
+                            color = com.example.ui.theme.DarkMossGrayMuted
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.LocationOn,
+                                contentDescription = null,
+                                tint = com.example.ui.theme.DeepForestTeal,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = att.checkInLocationName,
+                                fontSize = 10.sp,
+                                color = com.example.ui.theme.DeepForestTeal,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                    Surface(
+                        color = if (att.syncStatus == "SYNCED") com.example.ui.theme.PastelSeafoamLight else com.example.ui.theme.SoftAmberPeachLight,
+                        shape = RoundedCornerShape(4.dp)
+                    ) {
+                        Text(
+                            text = att.syncStatus,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (att.syncStatus == "SYNCED") com.example.ui.theme.DeepForestTeal else com.example.ui.theme.SoftAmberPeachDark,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
