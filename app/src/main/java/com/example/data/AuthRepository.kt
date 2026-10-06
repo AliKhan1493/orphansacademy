@@ -1,6 +1,7 @@
 package com.example.data
 
 import android.content.Context
+import android.util.Log
 import com.example.model.UserAccount
 import com.example.model.UserRole
 import com.example.util.SecurityUtils
@@ -24,15 +25,36 @@ class AuthRepository(
     private val context: Context,
     private val userAccountDao: UserAccountDao
 ) {
+    companion object {
+        private const val TAG = "AuthRepository"
+    }
+
     private val _currentUser = MutableStateFlow<UserAccount?>(null)
     val currentUser: StateFlow<UserAccount?> = _currentUser.asStateFlow()
 
+    private val isFirebaseAvailable: Boolean
+        get() {
+            return try {
+                val app = if (FirebaseApp.getApps(context).isEmpty()) {
+                    FirebaseApp.initializeApp(context)
+                } else {
+                    FirebaseApp.getInstance()
+                }
+                val apiKey = app?.options?.apiKey ?: ""
+                // Valid Google API keys start with "AIzaSy" and are genuine production keys
+                apiKey.isNotBlank() && !apiKey.contains("Demo", ignoreCase = true) && !apiKey.contains("Mock", ignoreCase = true)
+            } catch (e: Exception) {
+                false
+            }
+        }
+
     private val firebaseAuth: FirebaseAuth? by lazy {
         try {
-            if (FirebaseApp.getApps(context).isEmpty()) {
-                FirebaseApp.initializeApp(context)
+            if (isFirebaseAvailable) {
+                FirebaseAuth.getInstance()
+            } else {
+                null
             }
-            FirebaseAuth.getInstance()
         } catch (_: Exception) {
             null
         }
@@ -40,10 +62,11 @@ class AuthRepository(
 
     private val firestore: FirebaseFirestore? by lazy {
         try {
-            if (FirebaseApp.getApps(context).isEmpty()) {
-                FirebaseApp.initializeApp(context)
+            if (isFirebaseAvailable) {
+                FirebaseFirestore.getInstance()
+            } else {
+                null
             }
-            FirebaseFirestore.getInstance()
         } catch (_: Exception) {
             null
         }
@@ -53,7 +76,7 @@ class AuthRepository(
         // Clean out legacy demo accounts
         userAccountDao.removeOldDemoAccounts()
 
-        // Ensure primary system administrator exists
+        // Ensure primary system administrator exists in local Room database
         val adminEmail = "admin@orphan.com.pk"
         val existingAdmin = userAccountDao.getUserByEmail(adminEmail)
         if (existingAdmin == null) {
@@ -79,15 +102,19 @@ class AuthRepository(
     ): AuthResult = withContext(Dispatchers.IO) {
         val cleanEmail = email.trim().lowercase()
 
-        // If Airplane / Offline mode is selected:
-        if (!isOnline) {
+        // Check local database first: If user already exists locally and matches password,
+        // we can authenticate locally or check if offline fallback applies immediately.
+        val localUser = userAccountDao.getUserByEmail(cleanEmail)
+
+        // If offline mode is requested or Firebase configuration is not valid production:
+        if (!isOnline || !isFirebaseAvailable) {
             return@withContext performOfflineSignIn(cleanEmail, password)
         }
 
-        // Online flow: Attempt Firebase Auth
+        // Online flow: Attempt Firebase Auth with full graceful fallback
         val auth = firebaseAuth
         val db = firestore
-        if (auth != null && db != null) {
+        if (auth != null) {
             try {
                 val authResult = auth.signInWithEmailAndPassword(cleanEmail, password).await()
                 val firebaseUser = authResult.user
@@ -99,22 +126,22 @@ class AuthRepository(
                 var assignedLocation: String? = null
                 var studentAdmissionNo: String? = null
 
-                try {
-                    val doc = db.collection("users").document(uid).get().await()
-                    if (doc.exists()) {
-                        val roleStr = doc.getString("role")
-                        userRole = UserRole.fromString(roleStr)
-                        doc.getString("displayName")?.let { displayName = it }
-                        assignedLocation = doc.getString("assignedLocation")
-                        studentAdmissionNo = doc.getString("studentAdmissionNo")
-                    }
-                } catch (_: Exception) {
-                    // Firestore read failed, fallback to locally cached role if available
-                    val local = userAccountDao.getUserByEmail(cleanEmail)
-                    if (local != null) {
-                        userRole = local.role
-                        assignedLocation = local.assignedLocation
-                        studentAdmissionNo = local.studentAdmissionNo
+                if (db != null) {
+                    try {
+                        val doc = db.collection("users").document(uid).get().await()
+                        if (doc.exists()) {
+                            val roleStr = doc.getString("role")
+                            userRole = UserRole.fromString(roleStr)
+                            doc.getString("displayName")?.let { displayName = it }
+                            assignedLocation = doc.getString("assignedLocation")
+                            studentAdmissionNo = doc.getString("studentAdmissionNo")
+                        }
+                    } catch (_: Exception) {
+                        if (localUser != null) {
+                            userRole = localUser.role
+                            assignedLocation = localUser.assignedLocation
+                            studentAdmissionNo = localUser.studentAdmissionNo
+                        }
                     }
                 }
 
@@ -136,11 +163,11 @@ class AuthRepository(
                 return@withContext AuthResult.Success(
                     user = cachedAccount,
                     isOfflineAuth = false,
-                    message = "Online Authentication Verified via Firebase"
+                    message = "Online Authentication Verified"
                 )
             } catch (e: Exception) {
-                // Online attempt encountered network/Firebase error -> Try seamless fallback to Room offline cache
-                val localUser = userAccountDao.getUserByEmail(cleanEmail)
+                Log.w(TAG, "Online signIn failed with exception: ${e.message}. Falling back to local auth.")
+                // Seamlessly fall back to local Room verification
                 if (localUser != null && SecurityUtils.verifyPassword(password, localUser.passwordHash)) {
                     val updated = localUser.copy(lastLoginTimestamp = System.currentTimeMillis())
                     userAccountDao.updateUser(updated)
@@ -148,13 +175,24 @@ class AuthRepository(
                     return@withContext AuthResult.Success(
                         user = updated,
                         isOfflineAuth = true,
-                        message = "Welcome, ${updated.displayName}"
+                        message = "Welcome, ${updated.displayName} (Local Secure Mode)"
                     )
                 }
-                return@withContext AuthResult.Error(e.localizedMessage ?: "Sign-in failed")
+
+                // If error is about API key invalid / Firebase configuration, inform user or authenticate locally
+                val isApiKeyIssue = e.message?.contains("API key", ignoreCase = true) == true ||
+                                    e.message?.contains("internal error", ignoreCase = true) == true ||
+                                    e.message?.contains("Recaptcha", ignoreCase = true) == true
+
+                if (isApiKeyIssue) {
+                    // Check local credentials
+                    return@withContext performOfflineSignIn(cleanEmail, password)
+                }
+
+                return@withContext AuthResult.Error(e.localizedMessage ?: "Sign-in failed. Please verify credentials.")
             }
         } else {
-            // Firebase SDK not configured, perform offline Room auth
+            // Firebase SDK not configured with valid key, authenticate locally
             return@withContext performOfflineSignIn(cleanEmail, password)
         }
     }
@@ -171,7 +209,7 @@ class AuthRepository(
         val cleanEmail = email.trim().lowercase()
         val passwordHash = SecurityUtils.hashPassword(password)
 
-        if (!isOnline) {
+        if (!isOnline || !isFirebaseAvailable) {
             // 100% Offline Sign Up: Save user directly into Room marked with isPendingCloudSync = true
             val localUid = "local_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(6)}"
             val offlineAccount = UserAccount(
@@ -190,29 +228,31 @@ class AuthRepository(
             return@withContext AuthResult.Success(
                 user = offlineAccount,
                 isOfflineAuth = true,
-                message = "Offline Account Created (Pending Cloud Sync)"
+                message = "Account Created Locally (Saved in Room Database)"
             )
         }
 
         // Online Sign Up Flow
         val auth = firebaseAuth
         val db = firestore
-        if (auth != null && db != null) {
+        if (auth != null) {
             try {
                 val authResult = auth.createUserWithEmailAndPassword(cleanEmail, password).await()
                 val uid = authResult.user?.uid ?: UUID.randomUUID().toString()
 
-                // Save to Firestore
-                val userMap = hashMapOf(
-                    "uid" to uid,
-                    "email" to cleanEmail,
-                    "displayName" to displayName,
-                    "role" to role.name,
-                    "assignedLocation" to (assignedLocation ?: ""),
-                    "studentAdmissionNo" to (studentAdmissionNo ?: ""),
-                    "createdAt" to System.currentTimeMillis()
-                )
-                db.collection("users").document(uid).set(userMap).await()
+                // Save to Firestore if available
+                if (db != null) {
+                    val userMap = hashMapOf(
+                        "uid" to uid,
+                        "email" to cleanEmail,
+                        "displayName" to displayName,
+                        "role" to role.name,
+                        "assignedLocation" to (assignedLocation ?: ""),
+                        "studentAdmissionNo" to (studentAdmissionNo ?: ""),
+                        "createdAt" to System.currentTimeMillis()
+                    )
+                    db.collection("users").document(uid).set(userMap).await()
+                }
 
                 // Cache to Room
                 val account = UserAccount(
@@ -235,6 +275,7 @@ class AuthRepository(
                     message = "Account Registered Online & Synced with Cloud"
                 )
             } catch (e: Exception) {
+                Log.w(TAG, "Online signUp failed: ${e.message}. Falling back to local Room account creation.")
                 // Online signup threw error -> fallback to creating local offline account
                 val localUid = "local_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(6)}"
                 val fallbackAccount = UserAccount(
@@ -253,11 +294,11 @@ class AuthRepository(
                 return@withContext AuthResult.Success(
                     user = fallbackAccount,
                     isOfflineAuth = true,
-                    message = "Account created successfully"
+                    message = "Account created locally in secure database"
                 )
             }
         } else {
-            // Firebase not initialized, create locally
+            // Fallback to offline creation
             val localUid = "local_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(6)}"
             val offlineAccount = UserAccount(
                 uid = localUid,
@@ -275,14 +316,14 @@ class AuthRepository(
             return@withContext AuthResult.Success(
                 user = offlineAccount,
                 isOfflineAuth = true,
-                message = "Account created successfully"
+                message = "Account created locally in secure database"
             )
         }
     }
 
     private suspend fun performOfflineSignIn(email: String, password: String): AuthResult {
         val user = userAccountDao.getUserByEmail(email)
-            ?: return AuthResult.Error("No account found for '$email'.")
+            ?: return AuthResult.Error("No account found for '$email'. Click 'Use Admin Demo' or Sign Up.")
 
         if (SecurityUtils.verifyPassword(password, user.passwordHash)) {
             val updated = user.copy(lastLoginTimestamp = System.currentTimeMillis())
@@ -294,7 +335,7 @@ class AuthRepository(
                 message = "Welcome, ${user.displayName}"
             )
         } else {
-            return AuthResult.Error("Incorrect password.")
+            return AuthResult.Error("Incorrect password for '$email'.")
         }
     }
 
@@ -327,7 +368,7 @@ class AuthRepository(
         )
         userAccountDao.insertUser(newAccount)
 
-        if (isOnline && firestore != null) {
+        if (isOnline && isFirebaseAvailable && firestore != null) {
             try {
                 val data = hashMapOf(
                     "uid" to uid,
@@ -362,14 +403,16 @@ class AuthRepository(
     suspend fun deleteUserAccount(targetUid: String): Boolean = withContext(Dispatchers.IO) {
         userAccountDao.deleteUserByUid(targetUid)
         try {
-            firestore?.collection("users")?.document(targetUid)?.delete()
+            if (isFirebaseAvailable) {
+                firestore?.collection("users")?.document(targetUid)?.delete()
+            }
         } catch (_: Exception) {}
         true
     }
 
     suspend fun syncPendingAccounts(): Int = withContext(Dispatchers.IO) {
         val pending = userAccountDao.getPendingSyncUsers()
-        if (pending.isEmpty()) return@withContext 0
+        if (pending.isEmpty() || !isFirebaseAvailable) return@withContext 0
 
         val db = firestore ?: return@withContext 0
         var syncedCount = 0
@@ -389,7 +432,7 @@ class AuthRepository(
                 userAccountDao.updateUser(user.copy(isPendingCloudSync = false))
                 syncedCount++
             } catch (_: Exception) {
-                // Ignore sync individual failures
+                // Ignore individual failures
             }
         }
         syncedCount
@@ -400,10 +443,11 @@ class AuthRepository(
         val updated = target.copy(role = newRole, isPendingCloudSync = true)
         userAccountDao.updateUser(updated)
 
-        // Try pushing to Firestore if available
-        try {
-            firestore?.collection("users")?.document(targetUid)?.update("role", newRole.name)
-        } catch (_: Exception) {}
+        if (isFirebaseAvailable) {
+            try {
+                firestore?.collection("users")?.document(targetUid)?.update("role", newRole.name)
+            } catch (_: Exception) {}
+        }
     }
 
     fun switchUserQuick(account: UserAccount) {
@@ -412,7 +456,9 @@ class AuthRepository(
 
     fun signOut() {
         try {
-            firebaseAuth?.signOut()
+            if (isFirebaseAvailable) {
+                firebaseAuth?.signOut()
+            }
         } catch (_: Exception) {}
         _currentUser.value = null
     }

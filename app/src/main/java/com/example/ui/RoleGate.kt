@@ -1,5 +1,8 @@
 package com.example.ui
 
+import android.graphics.Bitmap
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -8,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Grade
+import androidx.compose.material.icons.filled.HowToReg
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MeetingRoom
 import androidx.compose.material.icons.filled.MenuBook
@@ -15,6 +19,7 @@ import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -32,20 +37,22 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.sp
+import com.example.model.AttendanceRecord
 import com.example.model.CustomFeature
+import com.example.model.DonationRecord
 import com.example.model.ExamTest
+import com.example.model.MonthlyDonorReport
+import com.example.model.Sponsor
 import com.example.model.Student
 import com.example.model.SyllabusTopic
 import com.example.model.Teacher
 import com.example.model.TestRecord
 import com.example.model.UserAccount
 import com.example.model.UserRole
-import com.example.ui.theme.DarkMossGray
 import com.example.ui.theme.DarkMossGrayMuted
 import com.example.ui.theme.DeepForestTeal
 import com.example.ui.theme.PaleSageOffWhite
 import com.example.ui.theme.PastelSeafoam
-import androidx.compose.foundation.background
 
 data class NavTabItem(
     val title: String,
@@ -68,8 +75,14 @@ fun RoleGate(
     tests: List<ExamTest>,
     records: List<TestRecord>,
     features: List<CustomFeature>,
+    sponsors: List<Sponsor> = emptyList(),
+    donations: List<DonationRecord> = emptyList(),
+    attendance: List<AttendanceRecord> = emptyList(),
     userAccounts: List<UserAccount>,
     pendingSyncCount: Int,
+    // Donor Report Dialog
+    selectedDonorReport: MonthlyDonorReport? = null,
+    onDismissDonorReport: () -> Unit = {},
     // Action callbacks
     onAddStudent: (Student) -> Unit,
     onDeleteStudent: (Student) -> Unit,
@@ -82,13 +95,29 @@ fun RoleGate(
     onAddTestRecord: (TestRecord) -> Unit,
     onAddFeature: (CustomFeature) -> Unit,
     onDeleteFeature: (CustomFeature) -> Unit,
+    onAddSponsor: (Sponsor) -> Unit = {},
+    onDeleteSponsor: (Sponsor) -> Unit = {},
+    onRecordDonation: (DonationRecord) -> Unit = {},
+    onGenerateDonorReport: (String) -> Unit = {},
     onUpdateUserRole: (targetUid: String, newRole: UserRole) -> Unit,
     onCreateUser: (name: String, email: String, password: String, role: UserRole, location: String?, admissionNo: String?) -> Unit = { _, _, _, _, _, _ -> },
     onResetUserPassword: (targetUid: String, newPassword: String) -> Unit = { _, _ -> },
     onDeleteUserAccount: (targetUid: String) -> Unit = {},
-    onForceSync: () -> Unit
+    onForceSync: () -> Unit,
+    // Live Location and Media Callbacks
+    todayAttendance: AttendanceRecord? = null,
+    isCheckingLocation: Boolean = false,
+    onTeacherCheckIn: () -> Unit = {},
+    onTeacherCheckOut: () -> Unit = {},
+    onStudentCheckIn: () -> Unit = {},
+    onCaptureStudentPhoto: (Bitmap) -> Unit = {}
 ) {
     var selectedTabIndex by remember(currentUser.role) { mutableIntStateOf(0) }
+
+    // Type-safe Android BackHandler: Pressing back on any secondary tab pops back to tab 0 (Home)
+    BackHandler(enabled = selectedTabIndex != 0) {
+        selectedTabIndex = 0
+    }
 
     // Dynamic Navigation tabs computed by active role
     val tabs = remember(currentUser.role) {
@@ -96,6 +125,8 @@ fun RoleGate(
             UserRole.ADMIN -> listOf(
                 NavTabItem("Teachers", Icons.Default.School, "nav_tab_admin_teachers"),
                 NavTabItem("Students", Icons.Default.People, "nav_tab_admin_students"),
+                NavTabItem("Sponsors", Icons.Default.VolunteerActivism, "nav_tab_admin_sponsors"),
+                NavTabItem("Attendance", Icons.Default.HowToReg, "nav_tab_admin_attendance"),
                 NavTabItem("Tests & A4", Icons.Default.PictureAsPdf, "nav_tab_admin_tests"),
                 NavTabItem("Features", Icons.Default.Widgets, "nav_tab_admin_features"),
                 NavTabItem("Admin Settings", Icons.Default.Security, "nav_tab_admin_settings")
@@ -103,6 +134,8 @@ fun RoleGate(
             UserRole.MANAGER -> listOf(
                 NavTabItem("Teachers & Loc", Icons.Default.LocationOn, "nav_tab_manager_teachers"),
                 NavTabItem("Students & ID", Icons.Default.Badge, "nav_tab_manager_students"),
+                NavTabItem("Attendance", Icons.Default.HowToReg, "nav_tab_manager_attendance"),
+                NavTabItem("Sponsors", Icons.Default.VolunteerActivism, "nav_tab_manager_sponsors"),
                 NavTabItem("Test Reports", Icons.Default.Assessment, "nav_tab_manager_reports"),
                 NavTabItem("Features", Icons.Default.Widgets, "nav_tab_manager_features")
             )
@@ -147,7 +180,7 @@ fun RoleGate(
                         selected = selectedTabIndex == index,
                         onClick = { selectedTabIndex = index },
                         icon = { Icon(imageVector = item.icon, contentDescription = item.title) },
-                        label = { Text(text = item.title, fontSize = 10.sp, maxLines = 1) },
+                        label = { Text(text = item.title, fontSize = 9.sp, maxLines = 1) },
                         modifier = Modifier.testTag(item.testTag),
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = DeepForestTeal,
@@ -172,9 +205,19 @@ fun RoleGate(
                     when (selectedTabIndex) {
                         0 -> AdminTeachersTab(teachers, onAddTeacher, onDeleteTeacher)
                         1 -> AdminStudentsTab(students, onAddStudent, onDeleteStudent)
-                        2 -> AdminTestsTab(tests, onAddTest, onDeleteTest)
-                        3 -> AdminFeaturesTab(features, onAddFeature, onDeleteFeature)
-                        4 -> AdminSettingsTab(
+                        2 -> AdminSponsorsTab(
+                            sponsors = sponsors,
+                            donations = donations,
+                            students = students,
+                            onAddSponsor = onAddSponsor,
+                            onDeleteSponsor = onDeleteSponsor,
+                            onRecordDonation = onRecordDonation,
+                            onGenerateReport = onGenerateDonorReport
+                        )
+                        3 -> AdminAttendanceTab(attendanceRecords = attendance)
+                        4 -> AdminTestsTab(tests, onAddTest, onDeleteTest)
+                        5 -> AdminFeaturesTab(features, onAddFeature, onDeleteFeature)
+                        6 -> AdminSettingsTab(
                             userAccounts = userAccounts,
                             onCreateUser = onCreateUser,
                             onResetPassword = onResetUserPassword,
@@ -189,8 +232,18 @@ fun RoleGate(
                     when (selectedTabIndex) {
                         0 -> ManagerTeachersViewTab(teachers)
                         1 -> ManagerStudentsAndIdTab(students, onAddStudent, onDeleteStudent)
-                        2 -> ManagerTestReportsTab(records)
-                        3 -> AdminFeaturesTab(features, onAddFeature, onDeleteFeature, isManagerMode = true)
+                        2 -> AdminAttendanceTab(attendanceRecords = attendance)
+                        3 -> AdminSponsorsTab(
+                            sponsors = sponsors,
+                            donations = donations,
+                            students = students,
+                            onAddSponsor = onAddSponsor,
+                            onDeleteSponsor = onDeleteSponsor,
+                            onRecordDonation = onRecordDonation,
+                            onGenerateReport = onGenerateDonorReport
+                        )
+                        4 -> ManagerTestReportsTab(records)
+                        5 -> AdminFeaturesTab(features, onAddFeature, onDeleteFeature, isManagerMode = true)
                     }
                 }
                 UserRole.TEACHER -> {
@@ -199,7 +252,11 @@ fun RoleGate(
                             currentUser = currentUser,
                             syllabusTopics = syllabusTopics,
                             onAddSyllabusTopic = onAddSyllabusTopic,
-                            onToggleTopicCompleted = onToggleTopicCompleted
+                            onToggleTopicCompleted = onToggleTopicCompleted,
+                            todayAttendance = todayAttendance,
+                            isCheckingLocation = isCheckingLocation,
+                            onCheckInLiveLocation = onTeacherCheckIn,
+                            onCheckOutLiveLocation = onTeacherCheckOut
                         )
                         1 -> TeacherStudentsRosterTab(students = students)
                         2 -> TeacherTestsAndPdfTab(
@@ -222,7 +279,11 @@ fun RoleGate(
                     when (selectedTabIndex) {
                         0 -> StudentDigitalIdTab(
                             currentUser = currentUser,
-                            studentProfile = myStudentProfile
+                            studentProfile = myStudentProfile,
+                            onPhotoCaptured = onCaptureStudentPhoto,
+                            todayAttendance = todayAttendance,
+                            isCheckingLocation = isCheckingLocation,
+                            onCheckInLiveLocation = onStudentCheckIn
                         )
                         1 -> StudentSyllabusTab(
                             syllabusTopics = syllabusTopics,
@@ -234,6 +295,14 @@ fun RoleGate(
                         )
                     }
                 }
+            }
+
+            // Monthly Donor Progress Report Dialog
+            if (selectedDonorReport != null) {
+                MonthlyDonorReportDialog(
+                    report = selectedDonorReport,
+                    onDismiss = onDismissDonorReport
+                )
             }
         }
     }

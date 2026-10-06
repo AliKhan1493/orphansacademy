@@ -53,11 +53,20 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.model.AttendanceRecord
 import com.example.model.ExamTest
 import com.example.model.Student
 import com.example.model.SyllabusTopic
 import com.example.model.TestRecord
 import com.example.model.UserAccount
+import androidx.compose.material.icons.filled.HowToReg
+import androidx.compose.material.icons.filled.NearMe
+import com.example.ui.theme.PastelSeafoam
+import com.example.ui.theme.PastelSeafoamLight
+import com.example.ui.theme.DeepForestTeal
+import com.example.ui.theme.DarkMossGray
+import com.example.ui.theme.SoftAmberPeach
+import com.example.ui.theme.PaleSageOffWhite
 import com.example.ui.theme.AcademyBlue
 import com.example.ui.theme.AcademyBlueDark
 import com.example.ui.theme.AcademyGold
@@ -71,7 +80,11 @@ fun TeacherLocationTab(
     currentUser: UserAccount,
     syllabusTopics: List<SyllabusTopic>,
     onAddSyllabusTopic: (SyllabusTopic) -> Unit,
-    onToggleTopicCompleted: (SyllabusTopic) -> Unit
+    onToggleTopicCompleted: (SyllabusTopic) -> Unit,
+    todayAttendance: AttendanceRecord? = null,
+    isCheckingLocation: Boolean = false,
+    onCheckInLiveLocation: () -> Unit = {},
+    onCheckOutLiveLocation: () -> Unit = {}
 ) {
     var showAddTopicDialog by remember { mutableStateOf(false) }
 
@@ -81,6 +94,99 @@ fun TeacherLocationTab(
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // Faculty Geolocation Check-In & Check-Out Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("teacher_geolocation_card"),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(14.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, PastelSeafoam)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(PastelSeafoam),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.NearMe,
+                                    contentDescription = null,
+                                    tint = DeepForestTeal,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "LIVE GEOLOCATION CHECK-IN",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = DeepForestTeal
+                                )
+                                Text(
+                                    text = if (todayAttendance != null) "Verified: ${todayAttendance.checkInLocationName}" else "Pending Daily Check-In",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = DarkMossGray
+                                )
+                            }
+                        }
+                        Surface(
+                            color = if (todayAttendance != null) PastelSeafoamLight else PaleSageOffWhite,
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = if (todayAttendance != null) "LOGGED (${todayAttendance.checkInTime})" else "NOT CHECKED IN",
+                                color = if (todayAttendance != null) DeepForestTeal else Color(0xFF64748B),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = onCheckInLiveLocation,
+                            enabled = !isCheckingLocation && todayAttendance == null,
+                            modifier = Modifier.weight(1f).testTag("teacher_gps_checkin_button"),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = DeepForestTeal)
+                        ) {
+                            Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(if (isCheckingLocation) "Locating..." else "GPS Check-In", fontSize = 11.sp)
+                        }
+
+                        OutlinedButton(
+                            onClick = onCheckOutLiveLocation,
+                            enabled = !isCheckingLocation && todayAttendance != null && todayAttendance.checkOutTime == null,
+                            modifier = Modifier.weight(1f).testTag("teacher_gps_checkout_button"),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(Icons.Default.HowToReg, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(if (todayAttendance?.checkOutTime != null) "Checked Out" else "Check-Out", fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+        }
         // Teacher Assigned Location & Classroom Card
         item {
             Card(

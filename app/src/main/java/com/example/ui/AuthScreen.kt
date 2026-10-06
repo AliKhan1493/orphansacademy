@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -26,6 +27,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.School
@@ -38,6 +40,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -95,7 +98,7 @@ fun AuthScreen(
     var isSignUpMode by remember { mutableStateOf(false) }
 
     var email by remember { mutableStateOf("admin@orphan.com.pk") }
-    var password by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("Pakistan@14931493") }
     var displayName by remember { mutableStateOf("") }
     var studentAdmissionNo by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
@@ -396,7 +399,29 @@ fun AuthScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Quick Fill Admin Demo Credentials helper button
+                    OutlinedButton(
+                        onClick = {
+                            isSignUpMode = false
+                            email = "admin@orphan.com.pk"
+                            password = "Pakistan@14931493"
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("fill_admin_credentials_button"),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = DeepForestTeal
+                        )
+                    ) {
+                        Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Fill Admin Demo Credentials", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     // Primary Submit Button: Soft Amber / Peach (#FB923C) for High-Motivation Call To Action
                     Button(
