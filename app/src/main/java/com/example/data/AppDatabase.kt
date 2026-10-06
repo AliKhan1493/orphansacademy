@@ -29,7 +29,7 @@ import com.example.model.UserAccount
         DonationRecord::class,
         AttendanceRecord::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

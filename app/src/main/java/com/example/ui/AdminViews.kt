@@ -39,10 +39,14 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -68,6 +72,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import com.example.model.AcademyGeofence
 import com.example.model.CustomFeature
 import com.example.model.ExamTest
 import com.example.model.Student
@@ -82,9 +87,21 @@ import androidx.compose.material.icons.filled.HowToReg
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Receipt
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.GpsFixed
+import androidx.compose.material.icons.filled.GroupAdd
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.clickable
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.ui.text.style.TextAlign
 import com.example.ui.theme.AcademyBlue
 import com.example.ui.theme.AcademyBlueDark
 import com.example.ui.theme.AcademyGold
+import com.example.ui.theme.DeepForestTeal
+import com.example.ui.theme.DarkMossGray
+import com.example.ui.theme.DarkMossGrayMuted
 import com.example.ui.theme.RoleAdminColor
 import com.example.ui.theme.Slate800
 import com.example.ui.theme.Slate900
@@ -99,6 +116,7 @@ fun AdminTeachersTab(
     onDeleteTeacher: (Teacher) -> Unit
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
+    var teacherToDelete by remember { mutableStateOf<Teacher?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
@@ -185,7 +203,7 @@ fun AdminTeachersTab(
                             )
                         }
                         IconButton(
-                            onClick = { onDeleteTeacher(teacher) },
+                            onClick = { teacherToDelete = teacher },
                             modifier = Modifier.testTag("delete_teacher_${teacher.id}")
                         ) {
                             Icon(
@@ -223,6 +241,19 @@ fun AdminTeachersTab(
                 onAddTeacher(teacher, password)
                 showAddDialog = false
             }
+        )
+    }
+
+    teacherToDelete?.let { teacher ->
+        DestructiveConfirmationDialog(
+            title = "Delete Faculty Member",
+            message = "This action will permanently delete this teacher from the database and revoke all academy access.",
+            targetItemName = "${teacher.fullName} (${teacher.email})",
+            onConfirmDelete = {
+                onDeleteTeacher(teacher)
+                teacherToDelete = null
+            },
+            onDismiss = { teacherToDelete = null }
         )
     }
 }
@@ -324,10 +355,41 @@ fun AddTeacherDialog(
 @Composable
 fun AdminStudentsTab(
     students: List<Student>,
+    sponsors: List<Sponsor> = emptyList(),
     onAddStudent: (Student) -> Unit,
-    onDeleteStudent: (Student) -> Unit
+    onDeleteStudent: (Student) -> Unit,
+    onBulkAssignStudentsToSponsor: (sponsorId: String, studentAdmissionNos: List<String>) -> Unit = { _, _ -> }
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
+    var studentToDelete by remember { mutableStateOf<Student?>(null) }
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedFilter by remember { mutableStateOf("ALL") } // ALL, UNSPONSORED, SPONSORED
+    val selectedStudents = remember { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
+    var showAssignSponsorDialog by remember { mutableStateOf(false) }
+
+    // Map sponsored admission numbers
+    val sponsoredAdmissionNos = remember(sponsors) {
+        sponsors.mapNotNull { it.sponsoredStudentAdmissionNo }.toSet()
+    }
+
+    val filteredStudents = remember(students, searchQuery, selectedFilter, sponsoredAdmissionNos) {
+        students.filter { student ->
+            val matchesSearch = student.fullName.contains(searchQuery, ignoreCase = true) ||
+                    student.admissionNo.contains(searchQuery, ignoreCase = true) ||
+                    student.gradeLevel.contains(searchQuery, ignoreCase = true)
+
+            val isSponsored = sponsoredAdmissionNos.contains(student.admissionNo)
+            val matchesFilter = when (selectedFilter) {
+                "UNSPONSORED" -> !isSponsored
+                "SPONSORED" -> isSponsored
+                else -> true
+            }
+
+            matchesSearch && matchesFilter
+        }
+    }
+
+    val selectedCount = selectedStudents.values.count { isSelected -> isSelected }
 
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
@@ -336,35 +398,152 @@ fun AdminStudentsTab(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            // Header with search bar & sticky filter chips (Data Scannability)
             item {
-                Text(
-                    text = "ENROLLED STUDENT CADETS (${students.size})",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = AcademyBlueDark,
-                    letterSpacing = 1.sp,
-                    modifier = Modifier.padding(vertical = 4.dp)
-                )
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "STUDENT DIRECTORY (${filteredStudents.size} of ${students.size})",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AcademyBlueDark,
+                        letterSpacing = 1.sp,
+                        modifier = Modifier.padding(vertical = 2.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Search input
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = { Text("Search by cadet name or ID...", fontSize = 13.sp) },
+                        leadingIcon = {
+                            Icon(Icons.Default.Search, contentDescription = null, tint = DeepForestTeal)
+                        },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(Icons.Default.Check, contentDescription = "Clear", tint = DarkMossGrayMuted)
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("admin_students_search_input"),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Filter Chips: All, Unsponsored, Sponsored
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        FilterChip(
+                            selected = selectedFilter == "ALL",
+                            onClick = { selectedFilter = "ALL" },
+                            label = { Text("All (${students.size})", fontSize = 11.sp) },
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        FilterChip(
+                            selected = selectedFilter == "UNSPONSORED",
+                            onClick = { selectedFilter = "UNSPONSORED" },
+                            label = { Text("Unsponsored (${students.count { !sponsoredAdmissionNos.contains(it.admissionNo) }})", fontSize = 11.sp) },
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        FilterChip(
+                            selected = selectedFilter == "SPONSORED",
+                            onClick = { selectedFilter = "SPONSORED" },
+                            label = { Text("Sponsored (${students.count { sponsoredAdmissionNos.contains(it.admissionNo) }})", fontSize = 11.sp) },
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
+
+                    // Bulk Operations Action Bar
+                    val hasSelection = selectedCount > 0
+                    if (hasSelection) {
+                        Surface(
+                            color = Color(0xFFEFF6FF),
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, Color(0xFFBFDBFE)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "$selectedCount selected",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = DeepForestTeal
+                                )
+
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Button(
+                                        onClick = { showAssignSponsorDialog = true },
+                                        colors = ButtonDefaults.buttonColors(containerColor = AcademyBlueDark),
+                                        shape = RoundedCornerShape(6.dp),
+                                        modifier = Modifier.height(34.dp)
+                                    ) {
+                                        Icon(Icons.Default.GroupAdd, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Assign to Donor", fontSize = 11.sp)
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = { selectedStudents.clear() },
+                                        shape = RoundedCornerShape(6.dp),
+                                        modifier = Modifier.height(34.dp)
+                                    ) {
+                                        Text("Clear", fontSize = 11.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
-            items(students) { student ->
+            items(filteredStudents) { student ->
+                val isSelected = selectedStudents[student.admissionNo] == true
+                val isSponsored = sponsoredAdmissionNos.contains(student.admissionNo)
+
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("student_row_${student.admissionNo}"),
                     colors = CardDefaults.cardColors(containerColor = Color.White),
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, if (isSelected) AcademyBlue else Color.Transparent)
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(14.dp),
+                            .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // Multi-select Checkbox
+                        Checkbox(
+                            checked = isSelected,
+                            onCheckedChange = { checked ->
+                                selectedStudents[student.admissionNo] = checked
+                            },
+                            colors = CheckboxDefaults.colors(checkedColor = DeepForestTeal),
+                            modifier = Modifier.testTag("student_checkbox_${student.admissionNo}")
+                        )
+
                         Box(
                             modifier = Modifier
-                                .size(44.dp)
+                                .size(42.dp)
                                 .clip(CircleShape)
                                 .background(Color(0xFFDBEAFE)),
                             contentAlignment = Alignment.Center
@@ -376,42 +555,42 @@ fun AdminStudentsTab(
                                 fontSize = 14.sp
                             )
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     text = student.fullName,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 15.sp,
+                                    fontSize = 14.sp,
                                     color = Slate900
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Surface(
-                                    color = Color(0xFFEFF6FF),
+                                    color = if (isSponsored) Color(0xFFDCFCE7) else Color(0xFFFEF3C7),
                                     shape = RoundedCornerShape(4.dp)
                                 ) {
                                     Text(
-                                        text = student.admissionNo,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = AcademyBlue,
-                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                        text = if (isSponsored) "SPONSORED" else "UNSPONSORED",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = if (isSponsored) Color(0xFF166534) else Color(0xFFB45309),
+                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
                                     )
                                 }
                             }
                             Text(
-                                text = "${student.gradeLevel} • ${student.assignedLocation}",
-                                fontSize = 12.sp,
+                                text = "ID: ${student.admissionNo} • ${student.gradeLevel}",
+                                fontSize = 11.sp,
                                 color = Color(0xFF475569)
                             )
                             Text(
-                                text = "Guardian: ${student.guardianName} (${student.guardianContact})",
+                                text = "Emergency: ${student.guardianName} (${student.emergencyContact})",
                                 fontSize = 10.sp,
                                 color = Color(0xFF94A3B8)
                             )
                         }
                         IconButton(
-                            onClick = { onDeleteStudent(student) },
+                            onClick = { studentToDelete = student },
                             modifier = Modifier.testTag("delete_student_${student.admissionNo}")
                         ) {
                             Icon(
@@ -449,6 +628,82 @@ fun AdminStudentsTab(
                 onAddStudent(student)
                 showAddDialog = false
             }
+        )
+    }
+
+    // Bulk Sponsor Assignment Dialog
+    if (showAssignSponsorDialog) {
+        val selectedAdmissionList = selectedStudents.entries.filter { entry -> entry.value }.map { entry -> entry.key }
+        var chosenSponsorId by remember { mutableStateOf(sponsors.firstOrNull()?.id ?: "") }
+
+        AlertDialog(
+            onDismissRequest = { showAssignSponsorDialog = false },
+            title = { Text("Assign Selected Cadets to Donor", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Assigning ${selectedAdmissionList.size} cadet(s) to a financial donor.",
+                        fontSize = 13.sp,
+                        color = DarkMossGray
+                    )
+                    Text(
+                        text = "Selected IDs: ${selectedAdmissionList.joinToString(", ")}",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AcademyBlueDark
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(text = "Select Donor:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    sponsors.forEach { sp ->
+                        Surface(
+                            onClick = { chosenSponsorId = sp.id },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            color = if (chosenSponsorId == sp.id) Color(0xFFEFF6FF) else Color(0xFFF8FAFC),
+                            border = BorderStroke(1.dp, if (chosenSponsorId == sp.id) AcademyBlue else Color(0xFFE2E8F0)),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text(text = sp.fullName, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text(text = "${sp.organization ?: "Individual"} • ${sp.currency} ${sp.monthlyPledgeAmount}/mo", fontSize = 11.sp, color = DarkMossGrayMuted)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (chosenSponsorId.isNotBlank() && selectedAdmissionList.isNotEmpty()) {
+                            onBulkAssignStudentsToSponsor(chosenSponsorId, selectedAdmissionList)
+                            selectedStudents.clear()
+                            showAssignSponsorDialog = false
+                        }
+                    },
+                    enabled = chosenSponsorId.isNotBlank() && selectedAdmissionList.isNotEmpty(),
+                    colors = ButtonDefaults.buttonColors(containerColor = AcademyBlueDark)
+                ) {
+                    Text("Confirm Assignment")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAssignSponsorDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    // Destructive Action Guardrail: requires typing "DELETE"
+    studentToDelete?.let { student ->
+        DestructiveConfirmationDialog(
+            title = "Delete Cadet Record",
+            message = "This will permanently purge this student from the institutional roster. Any associated exam records and donor pledges will be disconnected.",
+            targetItemName = "${student.fullName} (ID: ${student.admissionNo})",
+            onConfirmDelete = {
+                onDeleteStudent(student)
+                studentToDelete = null
+            },
+            onDismiss = { studentToDelete = null }
         )
     }
 }
@@ -544,6 +799,7 @@ fun AdminTestsTab(
 ) {
     val context = LocalContext.current
     var showAddDialog by remember { mutableStateOf(false) }
+    var testToDelete by remember { mutableStateOf<ExamTest?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
@@ -585,7 +841,7 @@ fun AdminTestsTab(
                                 color = Slate900,
                                 modifier = Modifier.weight(1f)
                             )
-                            IconButton(onClick = { onDeleteTest(test) }) {
+                            IconButton(onClick = { testToDelete = test }) {
                                 Icon(
                                     imageVector = Icons.Default.Delete,
                                     contentDescription = "Delete Test",
@@ -664,10 +920,23 @@ fun AdminTestsTab(
     if (showAddDialog) {
         CreateTestDialog(
             onDismiss = { showAddDialog = false },
-            onConfirm = { test ->
+            onConfirm = { test: ExamTest ->
                 onAddTest(test)
                 showAddDialog = false
             }
+        )
+    }
+
+    testToDelete?.let { test ->
+        DestructiveConfirmationDialog(
+            title = "Delete Examination Test",
+            message = "This will permanently delete this exam paper and its printable A4 configuration.",
+            targetItemName = "${test.title} (${test.subject})",
+            onConfirmDelete = {
+                onDeleteTest(test)
+                testToDelete = null
+            },
+            onDismiss = { testToDelete = null }
         )
     }
 }
@@ -1006,6 +1275,9 @@ fun AddFeatureDialog(
 @Composable
 fun AdminSettingsTab(
     userAccounts: List<UserAccount>,
+    academyGeofence: AcademyGeofence = AcademyGeofence(),
+    onUpdateAcademyGeofence: (Double, Double, Double, String) -> Unit = { _, _, _, _ -> },
+    onSetGeofenceFromDevice: () -> Unit = {},
     onCreateUser: (name: String, email: String, password: String, role: UserRole, location: String?, admissionNo: String?) -> Unit,
     onResetPassword: (targetUid: String, newPassword: String) -> Unit,
     onDeleteUser: (targetUid: String) -> Unit,
@@ -1021,8 +1293,160 @@ fun AdminSettingsTab(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // Academy Location & Geofence Perimeter Configuration (MANDATORY REQUIREMENT)
+        item {
+            var inputLat by remember(academyGeofence) { mutableStateOf(academyGeofence.latitude.toString()) }
+            var inputLon by remember(academyGeofence) { mutableStateOf(academyGeofence.longitude.toString()) }
+            var inputRadius by remember(academyGeofence) { mutableStateOf(academyGeofence.radiusMeters.toInt().toString()) }
+            var inputCampusName by remember(academyGeofence) { mutableStateOf(academyGeofence.campusName) }
+            var geofenceSavedMessage by remember { mutableStateOf<String?>(null) }
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("admin_geofence_settings_card"),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, DeepForestTeal)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFDCFCE7)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.LocationOn, contentDescription = null, tint = DeepForestTeal, modifier = Modifier.size(22.dp))
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "ACADEMY GEOFENCE PERIMETER",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = DeepForestTeal,
+                                letterSpacing = 1.sp
+                            )
+                            Text(
+                                text = "Check-In & Check-Out Coverage",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Slate900
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Assign the institutional GPS coordinates and coverage perimeter. Teachers checking in outside this perimeter are counted as OUT OF COVERAGE.",
+                        fontSize = 12.sp,
+                        color = DarkMossGray
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value = inputCampusName,
+                        onValueChange = { inputCampusName = it },
+                        label = { Text("Academy / Campus Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().testTag("geofence_name_input")
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = inputLat,
+                            onValueChange = { inputLat = it },
+                            label = { Text("Latitude (° N)") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f).testTag("geofence_lat_input")
+                        )
+                        OutlinedTextField(
+                            value = inputLon,
+                            onValueChange = { inputLon = it },
+                            label = { Text("Longitude (° E)") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f).testTag("geofence_lon_input")
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = inputRadius,
+                        onValueChange = { inputRadius = it },
+                        label = { Text("Allowed Coverage Radius (Meters)") },
+                        placeholder = { Text("e.g. 250") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().testTag("geofence_radius_input")
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                onSetGeofenceFromDevice()
+                                geofenceSavedMessage = "Current GPS acquired and assigned to Academy!"
+                            },
+                            modifier = Modifier.weight(1f).height(48.dp),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(Icons.Default.GpsFixed, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Use Device GPS", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Button(
+                            onClick = {
+                                val lat = inputLat.toDoubleOrNull() ?: academyGeofence.latitude
+                                val lon = inputLon.toDoubleOrNull() ?: academyGeofence.longitude
+                                val rad = inputRadius.toDoubleOrNull() ?: academyGeofence.radiusMeters
+                                onUpdateAcademyGeofence(lat, lon, rad, inputCampusName.ifBlank { "Main Campus" })
+                                geofenceSavedMessage = "Perimeter saved: ${rad.toInt()}m around $lat° N, $lon° E."
+                            },
+                            modifier = Modifier.weight(1f).height(48.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = DeepForestTeal)
+                        ) {
+                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Save Perimeter", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    if (geofenceSavedMessage != null) {
+                        Surface(
+                            color = Color(0xFFDCFCE7),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
+                        ) {
+                            Text(
+                                text = geofenceSavedMessage ?: "",
+                                color = Color(0xFF166534),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(8.dp),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1250,26 +1674,17 @@ fun AdminSettingsTab(
         )
     }
 
-    // Dialog for Delete Confirmation
+    // Dialog for Delete Confirmation with Destructive Guardrail
     deleteConfirmTargetUser?.let { target ->
-        AlertDialog(
-            onDismissRequest = { deleteConfirmTargetUser = null },
-            title = { Text("Delete Account", fontWeight = FontWeight.Bold) },
-            text = { Text("Are you sure you want to permanently delete account ${target.email} (${target.displayName})?") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        onDeleteUser(target.uid)
-                        deleteConfirmTargetUser = null
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
-                ) {
-                    Text("Delete Account")
-                }
+        DestructiveConfirmationDialog(
+            title = "Delete User Account",
+            message = "This will permanently delete this login account (${target.email}) and remove all cryptographic credentials.",
+            targetItemName = "${target.displayName} (${target.email})",
+            onConfirmDelete = {
+                onDeleteUser(target.uid)
+                deleteConfirmTargetUser = null
             },
-            dismissButton = {
-                TextButton(onClick = { deleteConfirmTargetUser = null }) { Text("Cancel") }
-            }
+            onDismiss = { deleteConfirmTargetUser = null }
         )
     }
 }
@@ -1446,6 +1861,26 @@ fun AdminSponsorsTab(
     var showAddSponsorDialog by remember { mutableStateOf(false) }
     var showAddDonationDialog by remember { mutableStateOf(false) }
     var selectedSponsorForDonation by remember { mutableStateOf<Sponsor?>(null) }
+    var sponsorToDelete by remember { mutableStateOf<Sponsor?>(null) }
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedFilter by remember { mutableStateOf("ALL") }
+
+    val filteredSponsors = remember(sponsors, searchQuery, selectedFilter) {
+        sponsors.filter { sponsor ->
+            val matchesSearch = sponsor.fullName.contains(searchQuery, ignoreCase = true) ||
+                    sponsor.email.contains(searchQuery, ignoreCase = true) ||
+                    (sponsor.organization?.contains(searchQuery, ignoreCase = true) == true) ||
+                    sponsor.sponsoredStudentAdmissionNo.contains(searchQuery, ignoreCase = true)
+
+            val matchesFilter = when (selectedFilter) {
+                "ACTIVE" -> sponsor.status.equals("ACTIVE", ignoreCase = true)
+                "INDIVIDUAL" -> sponsor.organization.isNullOrBlank()
+                else -> true
+            }
+
+            matchesSearch && matchesFilter
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
@@ -1455,27 +1890,76 @@ fun AdminSponsorsTab(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "SPONSORS & DONORS DIRECTORY (${sponsors.size})",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = AcademyBlueDark,
-                        letterSpacing = 1.sp
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "SPONSORS & DONORS DIRECTORY (${filteredSponsors.size})",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = AcademyBlueDark,
+                            letterSpacing = 1.sp
+                        )
+                        Text(
+                            text = "Donations: ${donations.size}",
+                            fontSize = 11.sp,
+                            color = com.example.ui.theme.DarkMossGrayMuted
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = { Text("Search sponsors by name, org, or student...", fontSize = 13.sp) },
+                        leadingIcon = {
+                            Icon(Icons.Default.Search, contentDescription = null, tint = DeepForestTeal)
+                        },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(Icons.Default.Check, contentDescription = "Clear", tint = DarkMossGrayMuted)
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().testTag("admin_sponsors_search_input"),
+                        shape = RoundedCornerShape(10.dp)
                     )
-                    Text(
-                        text = "Total Donations: ${donations.size}",
-                        fontSize = 11.sp,
-                        color = com.example.ui.theme.DarkMossGrayMuted
-                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        FilterChip(
+                            selected = selectedFilter == "ALL",
+                            onClick = { selectedFilter = "ALL" },
+                            label = { Text("All (${sponsors.size})", fontSize = 11.sp) },
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        FilterChip(
+                            selected = selectedFilter == "ACTIVE",
+                            onClick = { selectedFilter = "ACTIVE" },
+                            label = { Text("Active Donors", fontSize = 11.sp) },
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        FilterChip(
+                            selected = selectedFilter == "INDIVIDUAL",
+                            onClick = { selectedFilter = "INDIVIDUAL" },
+                            label = { Text("Individual Patrons", fontSize = 11.sp) },
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
                 }
             }
 
-            items(sponsors) { sponsor ->
+            items(filteredSponsors) { sponsor ->
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1522,8 +2006,8 @@ fun AdminSponsorsTab(
                                 )
                             }
                             IconButton(
-                                onClick = { onDeleteSponsor(sponsor) },
-                                modifier = Modifier.size(32.dp)
+                                onClick = { sponsorToDelete = sponsor },
+                                modifier = Modifier.size(32.dp).testTag("delete_sponsor_${sponsor.id}")
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Delete,
@@ -1774,6 +2258,20 @@ fun AdminSponsorsTab(
             dismissButton = {
                 TextButton(onClick = { showAddDonationDialog = false }) { Text("Cancel") }
             }
+        )
+    }
+
+    // Destructive Action Guardrail: requires typing "DELETE"
+    sponsorToDelete?.let { sponsor ->
+        DestructiveConfirmationDialog(
+            title = "Delete Sponsor Record",
+            message = "This will permanently remove this financial sponsor from the institution. Any associated active pledge records will be discontinued.",
+            targetItemName = "${sponsor.fullName} (${sponsor.organization ?: "Individual"})",
+            onConfirmDelete = {
+                onDeleteSponsor(sponsor)
+                sponsorToDelete = null
+            },
+            onDismiss = { sponsorToDelete = null }
         )
     }
 }

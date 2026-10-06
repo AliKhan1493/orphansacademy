@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -589,6 +590,106 @@ fun MonthlyDonorReportDialog(
                 colors = ButtonDefaults.buttonColors(containerColor = DeepForestTeal)
             ) {
                 Text("Close Report")
+            }
+        }
+    )
+}
+
+@Composable
+fun DestructiveConfirmationDialog(
+    title: String,
+    message: String,
+    targetItemName: String,
+    onConfirmDelete: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var typedConfirmation by remember { mutableStateOf("") }
+    val isConfirmed = typedConfirmation.trim() == "DELETE"
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFFEE2E2)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("⚠️", fontSize = 16.sp)
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = title,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = Color(0xFF991B1B)
+                )
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = message,
+                    fontSize = 13.sp,
+                    color = DarkMossGray
+                )
+                Surface(
+                    color = Color(0xFFFEF2F2),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, Color(0xFFFCA5A5))
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text(
+                            text = "Target to permanently remove:",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF991B1B)
+                        )
+                        Text(
+                            text = targetItemName,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1E293B)
+                        )
+                    }
+                }
+                Text(
+                    text = "Critical Guardrail: Please type DELETE to confirm:",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFB91C1C)
+                )
+                androidx.compose.material3.OutlinedTextField(
+                    value = typedConfirmation,
+                    onValueChange = { typedConfirmation = it },
+                    placeholder = { Text("Type DELETE here") },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("delete_guardrail_input"),
+                    shape = RoundedCornerShape(8.dp)
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirmDelete,
+                enabled = isConfirmed,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFDC2626),
+                    disabledContainerColor = Color(0xFFFCA5A5).copy(alpha = 0.5f)
+                ),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.testTag("confirm_delete_guardrail_button")
+            ) {
+                Text("Confirm Deletion", color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                Text("Cancel", color = DarkMossGrayMuted)
             }
         }
     )

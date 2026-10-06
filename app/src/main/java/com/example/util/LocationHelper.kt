@@ -20,6 +20,13 @@ data class GeolocationResult(
     val formattedCoordinates: String
 )
 
+data class GeofenceCheckResult(
+    val isWithinCoverage: Boolean,
+    val distanceMeters: Float,
+    val allowedRadiusMeters: Double,
+    val formattedDistance: String
+)
+
 object LocationHelper {
     private const val TAG = "LocationHelper"
 
@@ -104,5 +111,38 @@ object LocationHelper {
             lat in 24.8580..24.8599 && lon in 67.0000..67.0030 -> "Residential Hostel & Cafeteria Hall"
             else -> "Academy Perimeter • Verified Check-In Station"
         }
+    }
+
+    fun calculateDistanceMeters(
+        startLat: Double,
+        startLon: Double,
+        endLat: Double,
+        endLon: Double
+    ): Float {
+        val results = FloatArray(1)
+        Location.distanceBetween(startLat, startLon, endLat, endLon, results)
+        return results[0]
+    }
+
+    fun verifyGeofence(
+        currentLat: Double,
+        currentLon: Double,
+        assignedLat: Double,
+        assignedLon: Double,
+        radiusMeters: Double
+    ): GeofenceCheckResult {
+        val distance = calculateDistanceMeters(currentLat, currentLon, assignedLat, assignedLon)
+        val isWithin = distance <= radiusMeters
+        val formatted = if (distance < 1000) {
+            String.format(Locale.US, "%.0f m away", distance)
+        } else {
+            String.format(Locale.US, "%.2f km away", distance / 1000f)
+        }
+        return GeofenceCheckResult(
+            isWithinCoverage = isWithin,
+            distanceMeters = distance,
+            allowedRadiusMeters = radiusMeters,
+            formattedDistance = formatted
+        )
     }
 }

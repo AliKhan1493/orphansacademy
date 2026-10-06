@@ -97,8 +97,8 @@ fun AuthScreen(
 ) {
     var isSignUpMode by remember { mutableStateOf(false) }
 
-    var email by remember { mutableStateOf("admin@orphan.com.pk") }
-    var password by remember { mutableStateOf("Pakistan@14931493") }
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
     var displayName by remember { mutableStateOf("") }
     var studentAdmissionNo by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
@@ -289,7 +289,7 @@ fun AuthScreen(
                         value = email,
                         onValueChange = { email = it },
                         label = { Text("Email Address", color = DarkMossGrayMuted) },
-                        placeholder = { Text("admin@orphan.com.pk") },
+                        placeholder = { Text("Enter your registered email") },
                         leadingIcon = {
                             Icon(Icons.Default.Email, contentDescription = null, tint = DeepForestTeal)
                         },
@@ -400,28 +400,6 @@ fun AuthScreen(
                     }
 
                     Spacer(modifier = Modifier.height(20.dp))
-
-                    // Quick Fill Admin Demo Credentials helper button
-                    OutlinedButton(
-                        onClick = {
-                            isSignUpMode = false
-                            email = "admin@orphan.com.pk"
-                            password = "Pakistan@14931493"
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("fill_admin_credentials_button"),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = DeepForestTeal
-                        )
-                    ) {
-                        Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Fill Admin Demo Credentials", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
 
                     // Primary Submit Button: Soft Amber / Peach (#FB923C) for High-Motivation Call To Action
                     Button(

@@ -78,9 +78,6 @@ class MainActivity : ComponentActivity() {
                 val authUiState by authViewModel.uiState.collectAsState()
                 val currentUser = authUiState.currentUser
 
-                // Quick role switcher dialog state
-                var showQuickRoleSwitcher by remember { mutableStateOf(false) }
-
                 // Auto sync when coming back online
                 LaunchedEffect(authUiState.isOnline) {
                     if (authUiState.isOnline) {
@@ -191,6 +188,8 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
+                    val academyGeofence by adminViewModel.academyGeofence.collectAsState()
+
                     RoleGate(
                         currentUser = currentUser,
                         isOnline = authUiState.isOnline,
@@ -200,7 +199,8 @@ class MainActivity : ComponentActivity() {
                             authViewModel.signOut()
                             Toast.makeText(applicationContext, "Signed Out", Toast.LENGTH_SHORT).show()
                         },
-                        onQuickSwitchClick = { showQuickRoleSwitcher = true },
+                        onQuickSwitchClick = null,
+                        academyGeofence = academyGeofence,
                         students = students,
                         teachers = teachers,
                         syllabusTopics = syllabusTopics,
@@ -296,12 +296,12 @@ class MainActivity : ComponentActivity() {
                         todayAttendance = if (currentUser.role == UserRole.TEACHER) teacherAttendance else studentAttendance,
                         isCheckingLocation = if (currentUser.role == UserRole.TEACHER) isTeacherCheckingLocation else isStudentCheckingLocation,
                         onTeacherCheckIn = {
-                            teacherViewModel.checkInLiveLocation(currentUser.uid, currentUser.displayName) { msg ->
+                            teacherViewModel.checkInLiveLocation(currentUser.uid, currentUser.displayName) { msg, _ ->
                                 Toast.makeText(applicationContext, msg, Toast.LENGTH_SHORT).show()
                             }
                         },
                         onTeacherCheckOut = {
-                            teacherViewModel.checkOutLiveLocation(currentUser.uid) { msg ->
+                            teacherViewModel.checkOutLiveLocation(currentUser.uid) { msg, _ ->
                                 Toast.makeText(applicationContext, msg, Toast.LENGTH_SHORT).show()
                             }
                         },
@@ -326,136 +326,19 @@ class MainActivity : ComponentActivity() {
                             studentViewModel.savePhotoPermanently(bitmap, currentStudent) { savedPath ->
                                 Toast.makeText(applicationContext, "Photo saved permanently to device storage", Toast.LENGTH_SHORT).show()
                             }
-                        }
-                    )
-                }
-
-                // Quick Role Switcher Dialog (utility preview)
-                if (showQuickRoleSwitcher) {
-                    val userAccountsList by adminViewModel.userAccounts.collectAsState()
-                    QuickRoleSwitcherDialog(
-                        currentUser = currentUser,
-                        userAccounts = userAccountsList,
-                        onSelectAccount = { selectedAccount ->
-                            authViewModel.switchUserQuick(selectedAccount)
-                            showQuickRoleSwitcher = false
-                            Toast.makeText(
-                                applicationContext,
-                                "Switched to ${selectedAccount.role.name} (${selectedAccount.displayName})",
-                                Toast.LENGTH_SHORT
-                            ).show()
                         },
-                        onDismiss = { showQuickRoleSwitcher = false }
+                        onSaveClassroomRosterAttendance = { records ->
+                            teacherViewModel.saveClassroomAttendance(records) { msg ->
+                                Toast.makeText(applicationContext, msg, Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        onBulkAssignStudentsToSponsor = { sponsorId, admissionNos ->
+                            adminViewModel.bulkAssignStudentsToSponsor(sponsorId, admissionNos)
+                            Toast.makeText(applicationContext, "Assigned ${admissionNos.size} cadet(s) to donor", Toast.LENGTH_SHORT).show()
+                        }
                     )
                 }
             }
         }
     }
-}
-
-@Composable
-fun QuickRoleSwitcherDialog(
-    currentUser: UserAccount?,
-    userAccounts: List<UserAccount>,
-    onSelectAccount: (UserAccount) -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = "Switch Active User / Role",
-                fontWeight = FontWeight.Bold,
-                fontSize = 18.sp
-            )
-        },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = "Select any verified tier account to immediately switch active permissions and NavigationBar routing:",
-                    fontSize = 12.sp,
-                    color = Color(0xFF475569)
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                userAccounts.forEach { account ->
-                    val isCurrent = currentUser?.uid == account.uid
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSelectAccount(account) }
-                            .testTag("switch_to_account_${account.uid}"),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (isCurrent) PastelSeafoamLight else Color.White
-                        ),
-                        border = androidx.compose.foundation.BorderStroke(
-                            1.dp,
-                            if (isCurrent) DeepForestTeal else Color(0xFFE2E8F0)
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(getRoleColor(account.role)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = account.role.name.take(1),
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = account.displayName,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
-                                    color = DarkMossGray
-                                )
-                                Text(
-                                    text = "${account.role.name} • ${account.email}",
-                                    fontSize = 11.sp,
-                                    color = DarkMossGrayMuted
-                                )
-                            }
-                            if (isCurrent) {
-                                Surface(
-                                    color = DeepForestTeal,
-                                    shape = RoundedCornerShape(4.dp)
-                                ) {
-                                    Text(
-                                        text = "ACTIVE",
-                                        color = Color.White,
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Close")
-            }
-        }
-    )
 }

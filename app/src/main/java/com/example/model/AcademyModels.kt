@@ -26,7 +26,10 @@ data class Teacher(
     val specialization: String,
     val assignedLocation: String,
     val activeClassroom: String,
-    val contactNumber: String
+    val contactNumber: String,
+    val assignedLatitude: Double = 24.8607,
+    val assignedLongitude: Double = 67.0011,
+    val geofenceRadiusMeters: Double = 150.0
 )
 
 @Entity(tableName = "syllabus_topics")

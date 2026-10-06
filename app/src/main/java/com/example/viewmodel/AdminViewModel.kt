@@ -71,9 +71,36 @@ class AdminViewModel(
     private val _selectedDonorReport = MutableStateFlow<MonthlyDonorReport?>(null)
     val selectedDonorReport: StateFlow<MonthlyDonorReport?> = _selectedDonorReport.asStateFlow()
 
+    private val sessionManager = com.example.util.EncryptedSessionManager(context)
+
+    private val _academyGeofence = MutableStateFlow(sessionManager.getAcademyGeofence())
+    val academyGeofence: StateFlow<com.example.model.AcademyGeofence> = _academyGeofence.asStateFlow()
+
     init {
         viewModelScope.launch {
             academyRepository.seedInitialAcademyDataIfEmpty()
+        }
+    }
+
+    fun updateAcademyGeofence(latitude: Double, longitude: Double, radiusMeters: Double, campusName: String) {
+        sessionManager.saveAcademyGeofence(latitude, longitude, radiusMeters, campusName)
+        _academyGeofence.value = sessionManager.getAcademyGeofence()
+    }
+
+    fun setGeofenceToCurrentDeviceLocation(radiusMeters: Double = 250.0, campusName: String = "Main Campus", onResult: (com.example.model.AcademyGeofence) -> Unit = {}) {
+        viewModelScope.launch {
+            val liveGeo = com.example.util.LocationHelper.getLiveLocation(context)
+            sessionManager.saveAcademyGeofence(liveGeo.latitude, liveGeo.longitude, radiusMeters, campusName)
+            val updated = sessionManager.getAcademyGeofence()
+            _academyGeofence.value = updated
+            onResult(updated)
+        }
+    }
+
+    fun bulkAssignStudentsToSponsor(sponsorId: String, studentAdmissionNos: List<String>, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            academyRepository.bulkAssignStudentsToSponsor(sponsorId, studentAdmissionNos)
+            onComplete()
         }
     }
 

@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.sp
+import com.example.model.AcademyGeofence
 import com.example.model.AttendanceRecord
 import com.example.model.CustomFeature
 import com.example.model.DonationRecord
@@ -105,12 +106,15 @@ fun RoleGate(
     onDeleteUserAccount: (targetUid: String) -> Unit = {},
     onForceSync: () -> Unit,
     // Live Location and Media Callbacks
+    academyGeofence: AcademyGeofence = AcademyGeofence(),
     todayAttendance: AttendanceRecord? = null,
     isCheckingLocation: Boolean = false,
     onTeacherCheckIn: () -> Unit = {},
     onTeacherCheckOut: () -> Unit = {},
     onStudentCheckIn: () -> Unit = {},
-    onCaptureStudentPhoto: (Bitmap) -> Unit = {}
+    onCaptureStudentPhoto: (Bitmap) -> Unit = {},
+    onSaveClassroomRosterAttendance: (List<AttendanceRecord>) -> Unit = {},
+    onBulkAssignStudentsToSponsor: (sponsorId: String, studentAdmissionNos: List<String>) -> Unit = { _, _ -> }
 ) {
     var selectedTabIndex by remember(currentUser.role) { mutableIntStateOf(0) }
 
@@ -204,7 +208,13 @@ fun RoleGate(
                 UserRole.ADMIN -> {
                     when (selectedTabIndex) {
                         0 -> AdminTeachersTab(teachers, onAddTeacher, onDeleteTeacher)
-                        1 -> AdminStudentsTab(students, onAddStudent, onDeleteStudent)
+                        1 -> AdminStudentsTab(
+                            students = students,
+                            sponsors = sponsors,
+                            onAddStudent = onAddStudent,
+                            onDeleteStudent = onDeleteStudent,
+                            onBulkAssignStudentsToSponsor = onBulkAssignStudentsToSponsor
+                        )
                         2 -> AdminSponsorsTab(
                             sponsors = sponsors,
                             donations = donations,
@@ -250,15 +260,17 @@ fun RoleGate(
                     when (selectedTabIndex) {
                         0 -> TeacherLocationTab(
                             currentUser = currentUser,
-                            syllabusTopics = syllabusTopics,
-                            onAddSyllabusTopic = onAddSyllabusTopic,
-                            onToggleTopicCompleted = onToggleTopicCompleted,
+                            academyGeofence = academyGeofence,
                             todayAttendance = todayAttendance,
                             isCheckingLocation = isCheckingLocation,
                             onCheckInLiveLocation = onTeacherCheckIn,
                             onCheckOutLiveLocation = onTeacherCheckOut
                         )
-                        1 -> TeacherStudentsRosterTab(students = students)
+                        1 -> TeacherClassAttendanceTab(
+                            students = students,
+                            isOnline = isOnline,
+                            onSaveAttendance = onSaveClassroomRosterAttendance
+                        )
                         2 -> TeacherTestsAndPdfTab(
                             tests = tests,
                             onAddTest = onAddTest,
